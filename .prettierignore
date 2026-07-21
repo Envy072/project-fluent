@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+out
+build
+.turbo
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+
+# Documentation is governed by its own immutability rules (see docs/milestones
+# and docs/engineering) and must never be rewritten by automated formatting.
+docs/
