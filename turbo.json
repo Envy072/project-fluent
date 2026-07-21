@@ -1,10 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
+  "globalEnv": ["NODE_ENV"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": ["NEXTAUTH_SECRET", "NEXTAUTH_URL", "API_URL", "NEXT_PUBLIC_API_URL"]
     },
     "dev": {
       "cache": false,
@@ -19,12 +21,21 @@
       "outputs": []
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "env": ["DATABASE_URL", "AUTH_JWT_SECRET", "AUTH_JWT_EXPIRES_IN"]
     },
     "test:e2e": {
       "dependsOn": ["build"],
       "outputs": ["playwright-report/**"],
-      "cache": false
+      "cache": false,
+      "env": [
+        "DATABASE_URL",
+        "AUTH_JWT_SECRET",
+        "AUTH_JWT_EXPIRES_IN",
+        "NEXTAUTH_SECRET",
+        "NEXTAUTH_URL",
+        "API_URL"
+      ]
     }
   }
 }

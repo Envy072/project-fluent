@@ -8,6 +8,7 @@ dist/
 out/
 build/
 .turbo/
+apps/api/generated/
 
 # Env files
 .env

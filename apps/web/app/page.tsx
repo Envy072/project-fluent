@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function HomePage() {
   return (
     <main
@@ -14,6 +16,7 @@ export default function HomePage() {
     >
       <h1>Project Fluent</h1>
       <p>Engineering Foundation Running</p>
+      <Link href="/login">Sign In</Link>
     </main>
   );
 }

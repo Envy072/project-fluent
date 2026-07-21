@@ -3,6 +3,21 @@ packages:
   - 'packages/*'
 allowBuilds:
   '@nestjs/core': true
+  '@prisma/engines': true
   '@swc/core': true
+  argon2: true
   esbuild: true
+  prisma: true
   sharp: true
+minimumReleaseAgeExclude:
+  - '@prisma/adapter-pg@7.9.0'
+  - '@prisma/client-runtime-utils@7.9.0'
+  - '@prisma/client@7.9.0'
+  - '@prisma/config@7.9.0'
+  - '@prisma/debug@7.9.0'
+  - '@prisma/driver-adapter-utils@7.9.0'
+  - '@prisma/engines@7.9.0'
+  - '@prisma/fetch-engine@7.9.0'
+  - '@prisma/get-platform@7.9.0'
+  - prisma@7.9.0
+  - next-auth@4.24.15

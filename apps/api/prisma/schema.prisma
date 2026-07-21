@@ -1,0 +1,26 @@
+// Project Fluent — Identity & Access data model.
+//
+// This schema intentionally contains only the User model required for
+// authentication (per M07/M17's Learner Identity and Authentication State
+// concepts, scoped to this sprint's Identity & Access foundation only).
+// No learning, AI, progress, or product tables exist here — those belong to
+// future sprints once their own Domain Services are implemented.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}

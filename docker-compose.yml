@@ -39,6 +39,11 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://fluent:fluent_dev_password@postgres:5432/project_fluent
       REDIS_URL: redis://redis:6379
+      WEB_APP_URL: http://localhost:3100
+      # Development-only secrets. Every real environment must set its own
+      # distinct, randomly generated value (see .env.example).
+      AUTH_JWT_SECRET: dev-only-api-jwt-secret-6f2b9d1c4a7e8f30-do-not-use-in-production
+      AUTH_JWT_EXPIRES_IN: 1d
     ports:
       - '4000:4000'
     depends_on:
@@ -55,6 +60,13 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://localhost:4000
+      # Server-side URL: reaches the api container over the Docker network,
+      # distinct from the browser-facing NEXT_PUBLIC_API_URL above.
+      API_URL: http://api:4000
+      NEXTAUTH_URL: http://localhost:3100
+      # Development-only secret, intentionally different from the api
+      # service's AUTH_JWT_SECRET (see ADR-005 and .env.example).
+      NEXTAUTH_SECRET: dev-only-web-nextauth-secret-9a1e5c8b2d6f4037-do-not-use-in-production
     ports:
       - '3100:3100'
     depends_on:
