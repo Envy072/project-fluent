@@ -44,6 +44,12 @@ services:
       # distinct, randomly generated value (see .env.example).
       AUTH_JWT_SECRET: dev-only-api-jwt-secret-6f2b9d1c4a7e8f30-do-not-use-in-production
       AUTH_JWT_EXPIRES_IN: 1d
+      # Placeholder only — the AI Integration Module (M21) is not invoked by
+      # anything yet (its only permitted caller, Session Generation, does
+      # not exist until a future sprint), so this key is never actually
+      # used to call the Anthropic API in Version 1's current scope. Every
+      # real environment must set its own real key (see .env.example).
+      ANTHROPIC_API_KEY: dev-only-placeholder-not-a-real-anthropic-key-do-not-use-in-production
     ports:
       - '4000:4000'
     depends_on:

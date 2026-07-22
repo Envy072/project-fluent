@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { LearningConfigurationModule } from './learning-configuration/learning-configuration.module';
+import { AiIntegrationModule } from './ai-integration/ai-integration.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { LearningConfigurationModule } from './learning-configuration/learning-c
     UsersModule,
     AuthModule,
     LearningConfigurationModule,
+    AiIntegrationModule,
   ],
 })
 export class AppModule {}

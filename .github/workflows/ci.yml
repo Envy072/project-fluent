@@ -13,6 +13,7 @@ env:
   # randomly generated values (see .env.example, ADR-005).
   DATABASE_URL: postgresql://fluent:fluent_ci_password@localhost:5432/project_fluent
   AUTH_JWT_SECRET: ci-only-api-jwt-secret-6f2b9d1c4a7e8f30-do-not-use-in-production
+  ANTHROPIC_API_KEY: ci-only-placeholder-not-a-real-anthropic-key-do-not-use-in-production
   NEXTAUTH_SECRET: ci-only-web-nextauth-secret-9a1e5c8b2d6f4037-do-not-use-in-production
   NEXTAUTH_URL: http://localhost:3100
   API_URL: http://localhost:4000
