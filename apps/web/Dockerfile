@@ -13,6 +13,11 @@ RUN pnpm install --frozen-lockfile --filter @project-fluent/web...
 
 FROM deps AS build
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_ vars are inlined into the client bundle at build time, so
+# they must be passed as a build ARG rather than a container-runtime env
+# var (unlike API_URL, which the server reads fresh from process.env).
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN pnpm --filter @project-fluent/web... build
 
 # Next's standalone output (per next.config.mjs's output: 'standalone') is

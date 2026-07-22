@@ -56,10 +56,15 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:4000
+      # NEXT_PUBLIC_API_URL is NOT set here: it's inlined into the client
+      # bundle at build time (see the `args` above and apps/web/Dockerfile),
+      # so setting it as a container-runtime env var here would have no
+      # effect on the already-built JavaScript.
       # Server-side URL: reaches the api container over the Docker network,
       # distinct from the browser-facing NEXT_PUBLIC_API_URL above.
       API_URL: http://api:4000

@@ -1,10 +1,9 @@
 import { getServerSession } from 'next-auth/next';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth-options';
-import { SignOutButton } from '@/components/sign-out-button';
+import { PreferencesForm } from '@/components/preferences-form';
 
-export default async function DashboardPage() {
+export default async function PreferencesPage() {
   const session = await getServerSession(authOptions);
 
   if (!session) {
@@ -24,10 +23,8 @@ export default async function DashboardPage() {
         textAlign: 'center',
       }}
     >
-      <p>Authenticated successfully.</p>
-      <p>{session.user?.email}</p>
-      <Link href="/dashboard/preferences">Manage Learning Preferences</Link>
-      <SignOutButton />
+      <h1>Learning Preferences</h1>
+      <PreferencesForm />
     </main>
   );
 }

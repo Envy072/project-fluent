@@ -1,10 +1,13 @@
-// Project Fluent — Identity & Access data model.
+// Project Fluent data model.
 //
-// This schema intentionally contains only the User model required for
-// authentication (per M07/M17's Learner Identity and Authentication State
-// concepts, scoped to this sprint's Identity & Access foundation only).
-// No learning, AI, progress, or product tables exist here — those belong to
-// future sprints once their own Domain Services are implemented.
+// Identity & Access: the User model (per M07/M17's Learner Identity and
+// Authentication State concepts, scoped to Sprint 2's foundation).
+//
+// Learning Configuration (Sprint 3): the exact three fields defined by M09
+// ("No more, no fewer") — English Level, Learning Goal, and Topic Toggle
+// Preference. No other learning, AI, progress, or product tables exist
+// here — those belong to future sprints once their own Domain Services are
+// implemented.
 
 generator client {
   provider = "prisma-client-js"
@@ -22,5 +25,41 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  learningConfiguration LearningConfiguration?
+
   @@map("users")
+}
+
+enum EnglishLevel {
+  A1
+  A2
+  B1
+  B2
+  C1
+  C2
+}
+
+enum LearningGoal {
+  GENERAL_ENGLISH
+  IELTS
+  BUSINESS
+  TRAVEL
+  UNIVERSITY
+  JOB_INTERVIEWS
+}
+
+// A Learner has exactly one current English Level, Learning Goal, and
+// Topic Toggle Preference at any point in time (M07/M09) — modeled as a
+// single row per user rather than a history of configurations.
+model LearningConfiguration {
+  id                      String       @id @default(uuid())
+  userId                  String       @unique
+  user                    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  englishLevel            EnglishLevel
+  learningGoal            LearningGoal
+  useOneTopicForAllSkills Boolean      @default(true)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  @@map("learning_configurations")
 }
