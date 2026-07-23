@@ -16,7 +16,7 @@ test.describe('authentication flow', () => {
     await page.getByRole('button', { name: 'Sign In' }).click();
 
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByText('Authenticated successfully.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
     await expect(page.getByText(E2E_TEST_EMAIL)).toBeVisible();
   });
 
@@ -30,7 +30,7 @@ test.describe('authentication flow', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('signs out and returns to a protected-from state', async ({ page }) => {
+  test('signs out and returns to the Landing Page, per M04', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('Email').fill(E2E_TEST_EMAIL);
     await page.getByLabel('Password').fill(E2E_TEST_PASSWORD);
@@ -38,7 +38,8 @@ test.describe('authentication flow', () => {
     await expect(page).toHaveURL(/\/dashboard/);
 
     await page.getByRole('button', { name: 'Sign Out' }).click();
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL('http://localhost:3100/');
+    await expect(page.getByRole('heading', { name: 'Project Fluent' })).toBeVisible();
 
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/\/login/);

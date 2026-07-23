@@ -3,9 +3,10 @@ import { render, screen } from '@testing-library/react';
 import HomePage from '../app/page';
 
 describe('HomePage', () => {
-  it('renders the engineering foundation landing message', () => {
+  it('renders the landing page with Sign Up and Sign In links', () => {
     render(<HomePage />);
     expect(screen.getByText('Project Fluent')).toBeTruthy();
-    expect(screen.getByText('Engineering Foundation Running')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Sign Up' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Sign In' })).toBeTruthy();
   });
 });

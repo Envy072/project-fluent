@@ -2,6 +2,7 @@
 
 import { signIn } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Suspense, useState, type FormEvent } from 'react';
 
 function LoginForm() {
@@ -90,6 +91,7 @@ export default function LoginPage() {
       <Suspense>
         <LoginForm />
       </Suspense>
+      <Link href="/signup">Don&apos;t have an account? Sign Up</Link>
     </main>
   );
 }

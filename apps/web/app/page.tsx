@@ -15,8 +15,11 @@ export default function HomePage() {
       }}
     >
       <h1>Project Fluent</h1>
-      <p>Engineering Foundation Running</p>
-      <Link href="/login">Sign In</Link>
+      <p>One complete English practice session, generated for you.</p>
+      <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+        <Link href="/signup">Sign Up</Link>
+        <Link href="/login">Sign In</Link>
+      </div>
     </main>
   );
 }
