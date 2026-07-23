@@ -3,12 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LearningConfigurationService } from '../learning-configuration/learning-configuration.service';
 import { AiIntegrationService } from '../ai-integration/ai-integration.service';
 import { ProgressService } from '../progress/progress.service';
+import { ObservabilityService } from '../observability/observability.service';
+import { BusinessEvent, ObservabilityDomain } from '../observability/observability.types';
 import {
   SessionState,
   TopicAssignmentScope,
   type SessionCompositionPartName,
 } from '../../generated/prisma/client';
 import type {
+  GeneratedSessionComposition,
   GeneratedTopic,
   SessionCompositionPart as AiSessionCompositionPart,
 } from '../ai-integration/ai-integration.types';
@@ -40,6 +43,7 @@ export class SessionGenerationService {
     private readonly learningConfigurationService: LearningConfigurationService,
     private readonly aiIntegrationService: AiIntegrationService,
     private readonly progressService: ProgressService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   async generateSession(userId: string): Promise<SessionResponse> {
@@ -49,22 +53,30 @@ export class SessionGenerationService {
       where: { userId, state: SessionState.IN_PROGRESS },
     });
     if (existingInProgress) {
+      this.logGenerationFailed(userId, 'session_already_in_progress');
       throw new ConflictException(
         'Another Session is already In Progress for this account. Complete or abandon it before generating a new one.',
       );
     }
 
-    const topics = await this.aiIntegrationService.generateTopics({
-      englishLevel: configuration.englishLevel,
-      learningGoal: configuration.learningGoal,
-      topicToggleEnabled: configuration.useOneTopicForAllSkills,
-    });
+    let topics: GeneratedTopic[];
+    let compositionContent: GeneratedSessionComposition;
+    try {
+      topics = await this.aiIntegrationService.generateTopics({
+        englishLevel: configuration.englishLevel,
+        learningGoal: configuration.learningGoal,
+        topicToggleEnabled: configuration.useOneTopicForAllSkills,
+      });
 
-    const compositionContent = await this.aiIntegrationService.generateCompositionContent({
-      englishLevel: configuration.englishLevel,
-      learningGoal: configuration.learningGoal,
-      topics,
-    });
+      compositionContent = await this.aiIntegrationService.generateCompositionContent({
+        englishLevel: configuration.englishLevel,
+        learningGoal: configuration.learningGoal,
+        topics,
+      });
+    } catch (error) {
+      this.logGenerationFailed(userId, 'ai_generation_failed');
+      throw error;
+    }
 
     const session = await this.prisma.$transaction(async (tx) => {
       const createdSession = await tx.session.create({
@@ -98,7 +110,29 @@ export class SessionGenerationService {
       return createdSession;
     });
 
+    this.observability.logEvent(
+      BusinessEvent.SESSION_GENERATION_SUCCEEDED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      {
+        userId,
+        sessionId: session.id,
+        englishLevel: configuration.englishLevel,
+        learningGoal: configuration.learningGoal,
+      },
+    );
+
     return this.loadGeneratedSession(session.id, userId);
+  }
+
+  private logGenerationFailed(
+    userId: string,
+    reason: 'configuration_unconfigured' | 'session_already_in_progress' | 'ai_generation_failed',
+  ): void {
+    this.observability.logEvent(
+      BusinessEvent.SESSION_GENERATION_FAILED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      { userId, reason },
+    );
   }
 
   /**
@@ -125,6 +159,7 @@ export class SessionGenerationService {
     try {
       return await this.learningConfigurationService.findByUserId(userId);
     } catch {
+      this.logGenerationFailed(userId, 'configuration_unconfigured');
       throw new ConflictException(
         'English Level and Learning Goal must both be Configured before a Session can be generated.',
       );

@@ -3,6 +3,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { SessionExperienceService } from '../src/session-experience/session-experience.service';
 import type { ProgressService } from '../src/progress/progress.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import type { ObservabilityService } from '../src/observability/observability.service';
 import {
   EngagementStatus,
   ProgressOutcome,
@@ -49,16 +50,22 @@ function buildProgressServiceMock() {
   return { recordOutcome: vi.fn() } as unknown as ProgressService;
 }
 
+function buildObservabilityServiceMock() {
+  return { logEvent: vi.fn() } as unknown as ObservabilityService;
+}
+
 describe('SessionExperienceService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>['prisma'];
   let tx: ReturnType<typeof buildPrismaMock>['tx'];
   let progressService: ReturnType<typeof buildProgressServiceMock>;
+  let observability: ReturnType<typeof buildObservabilityServiceMock>;
   let service: SessionExperienceService;
 
   beforeEach(() => {
     ({ prisma, tx } = buildPrismaMock());
     progressService = buildProgressServiceMock();
-    service = new SessionExperienceService(prisma, progressService);
+    observability = buildObservabilityServiceMock();
+    service = new SessionExperienceService(prisma, progressService, observability);
   });
 
   describe('recordCompositionPartEngagement', () => {
@@ -132,6 +139,10 @@ describe('SessionExperienceService', () => {
         ProgressOutcome.COMPLETED,
         tx,
       );
+      expect(observability.logEvent).toHaveBeenCalledWith('session.completed', 'business_flows', {
+        userId: 'user-1',
+        sessionId: 'session-1',
+      });
     });
 
     it('rejects when not all parts have Reached End', async () => {
@@ -167,6 +178,10 @@ describe('SessionExperienceService', () => {
         ProgressOutcome.INCOMPLETE,
         tx,
       );
+      expect(observability.logEvent).toHaveBeenCalledWith('session.abandoned', 'business_flows', {
+        userId: 'user-1',
+        sessionId: 'session-1',
+      });
     });
 
     it('rejects when all seven parts have already Reached End', async () => {

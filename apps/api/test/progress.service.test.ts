@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 import { ProgressService } from '../src/progress/progress.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import type { ObservabilityService } from '../src/observability/observability.service';
 import { ProgressOutcome } from '../generated/prisma/client';
 
 function buildPrismaMock() {
@@ -15,13 +16,19 @@ function buildPrismaMock() {
   } as unknown as PrismaService;
 }
 
+function buildObservabilityServiceMock() {
+  return { logEvent: vi.fn() } as unknown as ObservabilityService;
+}
+
 describe('ProgressService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>;
+  let observability: ReturnType<typeof buildObservabilityServiceMock>;
   let service: ProgressService;
 
   beforeEach(() => {
     prisma = buildPrismaMock();
-    service = new ProgressService(prisma);
+    observability = buildObservabilityServiceMock();
+    service = new ProgressService(prisma, observability);
   });
 
   describe('createProgressRecord', () => {
@@ -62,6 +69,10 @@ describe('ProgressService', () => {
       expect(prisma.progressRecord.update).toHaveBeenCalledWith({
         where: { sessionId: 'session-1' },
         data: { outcome: ProgressOutcome.COMPLETED },
+      });
+      expect(observability.logEvent).toHaveBeenCalledWith('progress.recorded', 'business_flows', {
+        sessionId: 'session-1',
+        outcome: ProgressOutcome.COMPLETED,
       });
     });
 

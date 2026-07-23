@@ -5,6 +5,7 @@ import type { LearningConfigurationService } from '../src/learning-configuration
 import type { AiIntegrationService } from '../src/ai-integration/ai-integration.service';
 import type { ProgressService } from '../src/progress/progress.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import type { ObservabilityService } from '../src/observability/observability.service';
 import {
   EnglishLevel,
   LearningGoal,
@@ -64,12 +65,17 @@ function buildProgressServiceMock() {
   return { createProgressRecord: vi.fn() } as unknown as ProgressService;
 }
 
+function buildObservabilityServiceMock() {
+  return { logEvent: vi.fn() } as unknown as ObservabilityService;
+}
+
 describe('SessionGenerationService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>['prisma'];
   let tx: ReturnType<typeof buildPrismaMock>['tx'];
   let learningConfigurationService: ReturnType<typeof buildLearningConfigurationServiceMock>;
   let aiIntegrationService: ReturnType<typeof buildAiIntegrationServiceMock>;
   let progressService: ReturnType<typeof buildProgressServiceMock>;
+  let observability: ReturnType<typeof buildObservabilityServiceMock>;
   let service: SessionGenerationService;
 
   beforeEach(() => {
@@ -77,11 +83,13 @@ describe('SessionGenerationService', () => {
     learningConfigurationService = buildLearningConfigurationServiceMock();
     aiIntegrationService = buildAiIntegrationServiceMock();
     progressService = buildProgressServiceMock();
+    observability = buildObservabilityServiceMock();
     service = new SessionGenerationService(
       prisma,
       learningConfigurationService,
       aiIntegrationService,
       progressService,
+      observability,
     );
   });
 
@@ -147,6 +155,16 @@ describe('SessionGenerationService', () => {
     expect(progressService.createProgressRecord).toHaveBeenCalledWith('session-1', tx);
     expect(result.id).toBe('session-1');
     expect(result.compositionParts).toHaveLength(1);
+    expect(observability.logEvent).toHaveBeenCalledWith(
+      'session.generation.succeeded',
+      'business_flows',
+      {
+        userId: 'user-1',
+        sessionId: 'session-1',
+        englishLevel: EnglishLevel.B1,
+        learningGoal: LearningGoal.IELTS,
+      },
+    );
   });
 
   it('rejects generation when no Learning Configuration exists', async () => {
@@ -154,6 +172,11 @@ describe('SessionGenerationService', () => {
 
     await expect(service.generateSession('user-1')).rejects.toBeInstanceOf(ConflictException);
     expect(aiIntegrationService.generateTopics).not.toHaveBeenCalled();
+    expect(observability.logEvent).toHaveBeenCalledWith(
+      'session.generation.failed',
+      'business_flows',
+      { userId: 'user-1', reason: 'configuration_unconfigured' },
+    );
   });
 
   it('rejects generation when another Session is already In Progress', async () => {
@@ -162,6 +185,24 @@ describe('SessionGenerationService', () => {
 
     await expect(service.generateSession('user-1')).rejects.toBeInstanceOf(ConflictException);
     expect(aiIntegrationService.generateTopics).not.toHaveBeenCalled();
+    expect(observability.logEvent).toHaveBeenCalledWith(
+      'session.generation.failed',
+      'business_flows',
+      { userId: 'user-1', reason: 'session_already_in_progress' },
+    );
+  });
+
+  it('rejects generation when AI generation fails', async () => {
+    vi.mocked(learningConfigurationService.findByUserId).mockResolvedValue(CONFIGURATION);
+    vi.mocked(prisma.session.findFirst).mockResolvedValueOnce(null);
+    vi.mocked(aiIntegrationService.generateTopics).mockRejectedValue(new Error('AI unavailable'));
+
+    await expect(service.generateSession('user-1')).rejects.toThrow('AI unavailable');
+    expect(observability.logEvent).toHaveBeenCalledWith(
+      'session.generation.failed',
+      'business_flows',
+      { userId: 'user-1', reason: 'ai_generation_failed' },
+    );
   });
 
   it('maps a Disabled Topic Toggle Preference to one Topic per part', async () => {

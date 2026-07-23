@@ -1,5 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ObservabilityService } from '../observability/observability.service';
+import { BusinessEvent, ObservabilityDomain } from '../observability/observability.types';
 import { ProgressOutcome, type Prisma } from '../../generated/prisma/client';
 import type { MostRecentOutcomeResponse } from './progress.types';
 
@@ -12,7 +14,10 @@ type PrismaClientOrTransaction = PrismaService | Prisma.TransactionClient;
  */
 @Injectable()
 export class ProgressService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly observability: ObservabilityService,
+  ) {}
 
   /**
    * CreateProgressRecord (M18). Accepts an optional transaction client so
@@ -53,6 +58,15 @@ export class ProgressService {
       where: { sessionId },
       data: { outcome },
     });
+
+    this.observability.logEvent(
+      BusinessEvent.PROGRESS_RECORDED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      {
+        sessionId,
+        outcome,
+      },
+    );
   }
 
   /** GetMostRecentOutcome (M18). */

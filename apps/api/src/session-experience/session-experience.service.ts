@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProgressService } from '../progress/progress.service';
+import { ObservabilityService } from '../observability/observability.service';
+import { BusinessEvent, ObservabilityDomain } from '../observability/observability.types';
 import {
   EngagementStatus,
   ProgressOutcome,
@@ -25,6 +27,7 @@ export class SessionExperienceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly progressService: ProgressService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   /** RecordCompositionPartEngagement (M18). */
@@ -65,6 +68,15 @@ export class SessionExperienceService {
       });
       await this.progressService.recordOutcome(session.id, ProgressOutcome.COMPLETED, tx);
     });
+
+    this.observability.logEvent(
+      BusinessEvent.SESSION_COMPLETED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      {
+        userId,
+        sessionId,
+      },
+    );
   }
 
   /** AbandonSession (M18). */
@@ -84,6 +96,15 @@ export class SessionExperienceService {
       });
       await this.progressService.recordOutcome(session.id, ProgressOutcome.INCOMPLETE, tx);
     });
+
+    this.observability.logEvent(
+      BusinessEvent.SESSION_ABANDONED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      {
+        userId,
+        sessionId,
+      },
+    );
   }
 
   private allPartsReachedEnd(session: InProgressSession): boolean {

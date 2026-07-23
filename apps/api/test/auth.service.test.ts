@@ -4,6 +4,7 @@ import * as argon2 from 'argon2';
 import { AuthService } from '../src/auth/auth.service';
 import type { UsersService } from '../src/users/users.service';
 import type { JwtService } from '@nestjs/jwt';
+import type { ObservabilityService } from '../src/observability/observability.service';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
 
@@ -21,15 +22,21 @@ function buildJwtServiceMock() {
   } as unknown as JwtService;
 }
 
+function buildObservabilityServiceMock() {
+  return { logEvent: vi.fn() } as unknown as ObservabilityService;
+}
+
 describe('AuthService', () => {
   let usersService: ReturnType<typeof buildUsersServiceMock>;
   let jwtService: ReturnType<typeof buildJwtServiceMock>;
+  let observability: ReturnType<typeof buildObservabilityServiceMock>;
   let authService: AuthService;
 
   beforeEach(() => {
     usersService = buildUsersServiceMock();
     jwtService = buildJwtServiceMock();
-    authService = new AuthService(usersService, jwtService);
+    observability = buildObservabilityServiceMock();
+    authService = new AuthService(usersService, jwtService, observability);
   });
 
   describe('register', () => {
@@ -53,6 +60,11 @@ describe('AuthService', () => {
 
       expect(result).toEqual({ id: 'user-1', email: 'learner@example.com', createdAt: now });
       expect(result).not.toHaveProperty('passwordHash');
+      expect(observability.logEvent).toHaveBeenCalledWith(
+        'auth.register.succeeded',
+        'business_flows',
+        { userId: 'user-1' },
+      );
     });
 
     it('rejects registration when the email already exists', async () => {
@@ -68,6 +80,11 @@ describe('AuthService', () => {
         authService.register('learner@example.com', 'correct-horse-battery'),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(usersService.create).not.toHaveBeenCalled();
+      expect(observability.logEvent).toHaveBeenCalledWith(
+        'auth.register.failed',
+        'business_flows',
+        { reason: 'email_already_registered' },
+      );
     });
   });
 
@@ -119,6 +136,28 @@ describe('AuthService', () => {
       await expect(
         authService.validateCredentialsOrThrow('nobody@example.com', 'anything'),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(observability.logEvent).toHaveBeenCalledWith('auth.login.failed', 'business_flows', {
+        reason: 'invalid_credentials',
+      });
+    });
+
+    it('logs a success event when credentials are valid', async () => {
+      const passwordHash = await argon2.hash('correct-horse-battery');
+      vi.mocked(usersService.findByEmail).mockResolvedValue({
+        id: 'user-1',
+        email: 'learner@example.com',
+        passwordHash,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await authService.validateCredentialsOrThrow('learner@example.com', 'correct-horse-battery');
+
+      expect(observability.logEvent).toHaveBeenCalledWith(
+        'auth.login.succeeded',
+        'business_flows',
+        { userId: 'user-1' },
+      );
     });
   });
 

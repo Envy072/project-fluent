@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { LearningConfigurationService } from '../src/learning-configuration/learning-configuration.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import type { ObservabilityService } from '../src/observability/observability.service';
 import { EnglishLevel, LearningGoal } from '../generated/prisma/client';
 
 const now = new Date('2026-01-01T00:00:00.000Z');
@@ -30,13 +31,19 @@ function buildPrismaMock() {
   } as unknown as PrismaService;
 }
 
+function buildObservabilityServiceMock() {
+  return { logEvent: vi.fn() } as unknown as ObservabilityService;
+}
+
 describe('LearningConfigurationService', () => {
   let prisma: ReturnType<typeof buildPrismaMock>;
+  let observability: ReturnType<typeof buildObservabilityServiceMock>;
   let service: LearningConfigurationService;
 
   beforeEach(() => {
     prisma = buildPrismaMock();
-    service = new LearningConfigurationService(prisma);
+    observability = buildObservabilityServiceMock();
+    service = new LearningConfigurationService(prisma, observability);
   });
 
   describe('create', () => {
@@ -61,6 +68,17 @@ describe('LearningConfigurationService', () => {
         englishLevel: EnglishLevel.B1,
         learningGoal: LearningGoal.IELTS,
       });
+      expect(observability.logEvent).toHaveBeenCalledWith(
+        'configuration.changed',
+        'business_flows',
+        {
+          userId: 'user-1',
+          action: 'created',
+          englishLevel: EnglishLevel.B1,
+          learningGoal: LearningGoal.IELTS,
+          useOneTopicForAllSkills: true,
+        },
+      );
     });
 
     it('honors an explicit topic toggle value', async () => {
@@ -153,6 +171,14 @@ describe('LearningConfigurationService', () => {
       expect(prisma.learningConfiguration.delete).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
       });
+      expect(observability.logEvent).toHaveBeenCalledWith(
+        'configuration.changed',
+        'business_flows',
+        {
+          userId: 'user-1',
+          action: 'deleted',
+        },
+      );
     });
 
     it('throws NotFoundException when no configuration exists to delete', async () => {

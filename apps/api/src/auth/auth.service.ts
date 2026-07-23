@@ -2,6 +2,8 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { UsersService } from '../users/users.service';
+import { ObservabilityService } from '../observability/observability.service';
+import { BusinessEvent, ObservabilityDomain } from '../observability/observability.types';
 import type { AuthenticatedUser, JwtPayload, PublicUser } from './auth.types';
 
 @Injectable()
@@ -9,6 +11,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   /**
@@ -18,11 +21,25 @@ export class AuthService {
   async register(email: string, password: string): Promise<PublicUser> {
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
+      this.observability.logEvent(
+        BusinessEvent.AUTH_REGISTER_FAILED,
+        ObservabilityDomain.BUSINESS_FLOWS,
+        {
+          reason: 'email_already_registered',
+        },
+      );
       throw new ConflictException('An account with this email already exists.');
     }
 
     const passwordHash = await argon2.hash(password);
     const user = await this.usersService.create(email, passwordHash);
+    this.observability.logEvent(
+      BusinessEvent.AUTH_REGISTER_SUCCEEDED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      {
+        userId: user.id,
+      },
+    );
     return this.toPublicUser(user);
   }
 
@@ -49,8 +66,22 @@ export class AuthService {
   async validateCredentialsOrThrow(email: string, password: string): Promise<PublicUser> {
     const user = await this.validateCredentials(email, password);
     if (!user) {
+      this.observability.logEvent(
+        BusinessEvent.AUTH_LOGIN_FAILED,
+        ObservabilityDomain.BUSINESS_FLOWS,
+        {
+          reason: 'invalid_credentials',
+        },
+      );
       throw new UnauthorizedException('Invalid email or password.');
     }
+    this.observability.logEvent(
+      BusinessEvent.AUTH_LOGIN_SUCCEEDED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      {
+        userId: user.id,
+      },
+    );
     return user;
   }
 

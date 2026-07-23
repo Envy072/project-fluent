@@ -1,5 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ObservabilityService } from '../observability/observability.service';
+import { BusinessEvent, ObservabilityDomain } from '../observability/observability.types';
 import type { LearningConfiguration } from '../../generated/prisma/client';
 import type { CreateLearningConfigurationDto } from './dto/create-learning-configuration.dto';
 import type { UpdateLearningConfigurationDto } from './dto/update-learning-configuration.dto';
@@ -13,7 +15,10 @@ import type { LearningConfigurationResponse } from './learning-configuration.typ
  */
 @Injectable()
 export class LearningConfigurationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly observability: ObservabilityService,
+  ) {}
 
   async create(
     userId: string,
@@ -32,6 +37,7 @@ export class LearningConfigurationService {
         useOneTopicForAllSkills: dto.useOneTopicForAllSkills ?? true,
       },
     });
+    this.logConfigurationChanged(userId, 'created', config);
     return this.toResponse(config);
   }
 
@@ -59,12 +65,36 @@ export class LearningConfigurationService {
         }),
       },
     });
+    this.logConfigurationChanged(userId, 'updated', config);
     return this.toResponse(config);
   }
 
   async remove(userId: string): Promise<void> {
     await this.findByUserId(userId);
     await this.prisma.learningConfiguration.delete({ where: { userId } });
+    this.observability.logEvent(
+      BusinessEvent.CONFIGURATION_CHANGED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      { userId, action: 'deleted' },
+    );
+  }
+
+  private logConfigurationChanged(
+    userId: string,
+    action: 'created' | 'updated',
+    config: LearningConfiguration,
+  ): void {
+    this.observability.logEvent(
+      BusinessEvent.CONFIGURATION_CHANGED,
+      ObservabilityDomain.BUSINESS_FLOWS,
+      {
+        userId,
+        action,
+        englishLevel: config.englishLevel,
+        learningGoal: config.learningGoal,
+        useOneTopicForAllSkills: config.useOneTopicForAllSkills,
+      },
+    );
   }
 
   private toResponse(config: LearningConfiguration): LearningConfigurationResponse {
