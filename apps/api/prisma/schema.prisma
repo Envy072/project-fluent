@@ -5,9 +5,11 @@
 //
 // Learning Configuration (Sprint 3): the exact three fields defined by M09
 // ("No more, no fewer") — English Level, Learning Goal, and Topic Toggle
-// Preference. No other learning, AI, progress, or product tables exist
-// here — those belong to future sprints once their own Domain Services are
-// implemented.
+// Preference.
+//
+// Learning Engine (Sprint 5): Session, Topic, Session Composition, and
+// Progress Record (M07/M17) — realizing the Session Generation, Session
+// Experience, and Progress Services (M18).
 
 generator client {
   provider = "prisma-client-js"
@@ -26,6 +28,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   learningConfiguration LearningConfiguration?
+  sessions              Session[]
 
   @@map("users")
 }
@@ -62,4 +65,123 @@ model LearningConfiguration {
   updatedAt               DateTime     @updatedAt
 
   @@map("learning_configurations")
+}
+
+// M07 lists Session states as Generated, In Progress, Completed, Abandoned.
+// GENERATED is never a persisted resting state — GenerateSession's own
+// Postcondition describes a Session existing "in the Generated, then In
+// Progress, state" as one atomic transition, so rows are written directly
+// as IN_PROGRESS. The value is kept in the enum for fidelity to M07's
+// documented state machine.
+enum SessionState {
+  GENERATED
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum SessionCompositionPartName {
+  READING
+  LISTENING
+  SPEAKING
+  WRITING
+  VOCABULARY
+  GRAMMAR
+  QUIZ
+}
+
+enum EngagementStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  REACHED_END
+}
+
+enum TopicAssignmentScope {
+  SESSION
+  READING
+  LISTENING
+  SPEAKING
+  WRITING
+  VOCABULARY
+  GRAMMAR
+  QUIZ
+}
+
+// A Progress Record's Outcome only has meaning once Recorded (M07's Entity
+// State Definitions list exactly three combined states — Pending, Recorded
+// (Completed), Recorded (Incomplete) — never a Pending record with an
+// Outcome already attached), so Record Status and Outcome are modeled as
+// one enum rather than two independently nullable fields.
+enum ProgressOutcome {
+  PENDING
+  COMPLETED
+  INCOMPLETE
+}
+
+// A Session is generated once, from the Learner's Learning Configuration at
+// that moment (M07/M08) — its generating values are copied here and never
+// change afterward, regardless of later changes to the Learner's current
+// configuration.
+model Session {
+  id                      String       @id @default(uuid())
+  userId                  String
+  user                    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  englishLevel            EnglishLevel
+  learningGoal            LearningGoal
+  useOneTopicForAllSkills Boolean
+  state                   SessionState @default(IN_PROGRESS)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  topics           Topic[]
+  compositionParts SessionCompositionPart[]
+  progressRecord   ProgressRecord?
+
+  @@map("sessions")
+}
+
+// A Topic belongs to exactly one Session and has no existence or reuse
+// beyond it (M07). Assignment Scope is "SESSION" when the Topic Toggle
+// Preference was Enabled at generation (one shared Topic), or a specific
+// part name when Disabled (M17).
+model Topic {
+  id              String               @id @default(uuid())
+  sessionId       String
+  session         Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  subjectMatter   String
+  assignmentScope TopicAssignmentScope
+  createdAt       DateTime             @default(now())
+
+  @@map("topics")
+}
+
+// The seven Session Composition parts (M08) — always exactly seven per
+// Session, enforced by application logic at Session Generation, never
+// partial (M17's Data Integrity Rules).
+model SessionCompositionPart {
+  id               String                     @id @default(uuid())
+  sessionId        String
+  session          Session                    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  part             SessionCompositionPartName
+  content          String
+  engagementStatus EngagementStatus           @default(NOT_STARTED)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@unique([sessionId, part])
+  @@map("session_composition_parts")
+}
+
+// Exactly one Progress Record exists per Session (M07), created Pending
+// when the Session begins and finalized, immutably, once the Session
+// reaches Completed or Abandoned.
+model ProgressRecord {
+  id        String          @id @default(uuid())
+  sessionId String          @unique
+  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  outcome   ProgressOutcome @default(PENDING)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@map("progress_records")
 }

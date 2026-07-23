@@ -6,6 +6,9 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { LearningConfigurationModule } from './learning-configuration/learning-configuration.module';
 import { AiIntegrationModule } from './ai-integration/ai-integration.module';
+import { ProgressModule } from './progress/progress.module';
+import { SessionGenerationModule } from './session-generation/session-generation.module';
+import { SessionExperienceModule } from './session-experience/session-experience.module';
 
 @Module({
   imports: [
@@ -19,6 +22,9 @@ import { AiIntegrationModule } from './ai-integration/ai-integration.module';
     AuthModule,
     LearningConfigurationModule,
     AiIntegrationModule,
+    ProgressModule,
+    SessionGenerationModule,
+    SessionExperienceModule,
   ],
 })
 export class AppModule {}
