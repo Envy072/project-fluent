@@ -1,0 +1,239 @@
+name: Deploy
+
+# Manually triggered only — never automatic on push, per M37's explicit
+# "Approval" stage: a deployment is a deliberate act, not a side-effect of
+# merging. Realizes M38's six-stage Deployment Lifecycle (Preparation,
+# Environment Validation, Execution, Verification, Operational Validation,
+# Completion) end-to-end today against a rehearsal target (this repo's own
+# GHCR-hosted images, run via docker compose in the runner) — no AWS/Vercel
+# account exists yet (see this sprint's design review). Only the Execution
+# job's final deploy step needs to change once one does; every other stage
+# carries over unchanged.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to deploy (branch, tag, or SHA)'
+        required: false
+        default: 'main'
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository }}
+
+jobs:
+  # Stage 1: Deployment Preparation (M38) — the release candidate is
+  # confirmed to pass the same Quality Gates 1-3 (M34) required before
+  # Release Preparation (M37), scoped exactly to the requested ref.
+  preparation:
+    name: 'Stage 1: Preparation'
+    runs-on: ubuntu-latest
+    environment: rehearsal
+    env:
+      DEPLOYMENT_ENVIRONMENT: ci
+      DATABASE_URL: postgresql://fluent:fluent_ci_password@localhost:5432/project_fluent
+      AUTH_JWT_SECRET: ci-only-api-jwt-secret-6f2b9d1c4a7e8f30-do-not-use-in-production
+      ANTHROPIC_API_KEY: ci-only-placeholder-not-a-real-anthropic-key-do-not-use-in-production
+      NEXTAUTH_SECRET: ci-only-web-nextauth-secret-9a1e5c8b2d6f4037-do-not-use-in-production
+      NEXTAUTH_URL: http://localhost:3100
+      API_URL: http://localhost:4000
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fluent
+          POSTGRES_PASSWORD: fluent_ci_password
+          POSTGRES_DB: project_fluent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fluent -d project_fluent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @project-fluent/web exec playwright install --with-deps chromium
+
+      - name: Apply database migrations
+        run: pnpm --filter @project-fluent/api exec prisma migrate deploy
+
+      - name: Lint, typecheck, build, test, e2e, format (Quality Gates 1-3, M34)
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm build
+          pnpm test
+          pnpm test:e2e
+          pnpm format:check
+
+  # Stage 2: Environment Validation (M38) — confirms every secret the
+  # deployment target needs is actually configured before Execution
+  # begins. Today the rehearsal target's values are fixed and always
+  # present (proving the check itself works); this becomes the real gate
+  # once real secrets are required for a real cloud target.
+  environment-validation:
+    name: 'Stage 2: Environment Validation'
+    needs: preparation
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://fluent:fluent_rehearsal_password@localhost:5432/project_fluent
+      AUTH_JWT_SECRET: rehearsal-only-api-jwt-secret-do-not-use-in-production
+      ANTHROPIC_API_KEY: rehearsal-only-placeholder-not-a-real-anthropic-key
+      NEXTAUTH_SECRET: rehearsal-only-web-nextauth-secret-do-not-use-in-production
+      NEXTAUTH_URL: http://localhost:3100
+      API_URL: http://localhost:4000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Validate required deployment variables are present
+        run: bash scripts/deploy/validate-environment.sh
+
+  # Stage 3: Deployment Execution (M38) — builds and publishes versioned
+  # images to GHCR (no external cloud account needed — GITHUB_TOKEN is
+  # sufficient), then starts the rehearsal target running those exact
+  # images.
+  execution:
+    name: 'Stage 3: Execution'
+    needs: environment-validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api-image: ${{ steps.tags.outputs.api-image }}
+      web-image: ${{ steps.tags.outputs.web-image }}
+    steps:
+      - name: Checkout requested ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          SHA_TAG="${{ github.sha }}"
+          API_IMAGE="ghcr.io/${IMAGE_NAMESPACE,,}/api:${SHA_TAG}"
+          WEB_IMAGE="ghcr.io/${IMAGE_NAMESPACE,,}/web:${SHA_TAG}"
+          echo "api-image=${API_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "web-image=${WEB_IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.api-image }}
+            ghcr.io/${{ github.repository }}/api:latest
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:4000
+          tags: |
+            ${{ steps.tags.outputs.web-image }}
+            ghcr.io/${{ github.repository }}/web:latest
+
+      - name: Start rehearsal deployment target
+        env:
+          API_IMAGE: ${{ steps.tags.outputs.api-image }}
+          WEB_IMAGE: ${{ steps.tags.outputs.web-image }}
+        run: docker compose -f docker-compose.deploy-rehearsal.yml up -d
+
+  # Stage 4: Deployment Verification (M38) — confirms the deployed system
+  # is actually reachable and healthy before Completion.
+  verification:
+    name: 'Stage 4: Verification'
+    needs: execution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Run smoke tests against the rehearsal deployment
+        run: bash scripts/deploy/smoke-test.sh http://localhost:4000 http://localhost:3100
+
+  # Stage 5: Operational Validation (M38) — confirms the deployed system
+  # behaves as expected under real (rehearsal) runtime conditions, not
+  # only the synthetic conditions of Verification — specifically, that
+  # Sprint 7's structured observability events are actually flowing.
+  operational-validation:
+    name: 'Stage 5: Operational Validation'
+    needs: verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm containers report healthy
+        run: |
+          docker compose -f docker-compose.deploy-rehearsal.yml ps
+          for service in api web; do
+            status="$(docker inspect --format='{{.State.Health.Status}}' "$(docker compose -f docker-compose.deploy-rehearsal.yml ps -q "$service")")"
+            if [ "$status" != "healthy" ]; then
+              echo "Operational Validation failed — $service reports '$status', expected 'healthy'" >&2
+              exit 1
+            fi
+          done
+
+      - name: Confirm structured observability events are flowing (M44/Sprint 7)
+        run: |
+          if ! docker compose -f docker-compose.deploy-rehearsal.yml logs api | grep -q '"event":"http.request.completed"'; then
+            echo "Operational Validation failed — no structured observability events found in API logs" >&2
+            exit 1
+          fi
+          echo "Structured observability events confirmed flowing."
+
+  # Stage 6: Completion (M38) — the deployment is only considered complete
+  # once both Verification and Operational Validation have passed.
+  completion:
+    name: 'Stage 6: Completion'
+    needs: [execution, verification, operational-validation]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tear down the rehearsal target
+        run: docker compose -f docker-compose.deploy-rehearsal.yml down -v
+
+      - name: Summary
+        run: |
+          echo "### Deployment Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API image: \`${{ needs.execution.outputs.api-image }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Web image: \`${{ needs.execution.outputs.web-image }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Rehearsed against: local Docker Compose target (no cloud account provisioned yet)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- To roll back: run the Rollback workflow with the previous image tag." >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { validateEnvironment } from './config/environment-variables';
 import { HealthModule } from './health/health.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -16,6 +17,7 @@ import { SessionExperienceModule } from './session-experience/session-experience
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
+      validate: validateEnvironment,
     }),
     PrismaModule,
     ObservabilityModule,

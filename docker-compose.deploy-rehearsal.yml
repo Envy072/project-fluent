@@ -1,0 +1,62 @@
+# Rehearsal deployment target for the CI/CD pipeline (.github/workflows/deploy.yml).
+#
+# Proves M38's Deployment Lifecycle (Execution, Verification, Operational
+# Validation, Rollback) works end-to-end without depending on any specific
+# cloud account — per this sprint's explicit scope, no real AWS/Vercel
+# resources are provisioned yet. This file runs the exact images the
+# pipeline just built and pushed to GHCR, standing in for the real
+# deployment target (AWS ECS Fargate + Vercel, per ADR-010) until a
+# production cloud account exists.
+#
+# Once that account exists, only the pipeline's Execution step changes —
+# it deploys the same image reference to the real target instead of
+# starting it here. Everything upstream (build, validate, this rehearsal
+# swapped for the real target, verify, roll back) carries over unchanged.
+#
+# No Redis service is included: no application code consumes REDIS_URL yet
+# (see Sprint 9's design review, Finding 5), so provisioning it here would
+# rehearse nothing.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fluent
+      POSTGRES_PASSWORD: fluent_rehearsal_password
+      POSTGRES_DB: project_fluent
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fluent -d project_fluent']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE must be set to the image reference to rehearse}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_ENVIRONMENT: ci
+      PORT: 4000
+      DATABASE_URL: postgresql://fluent:fluent_rehearsal_password@postgres:5432/project_fluent
+      WEB_APP_URL: http://web:3100
+      AUTH_JWT_SECRET: rehearsal-only-api-jwt-secret-do-not-use-in-production
+      AUTH_JWT_EXPIRES_IN: 1d
+      ANTHROPIC_API_KEY: rehearsal-only-placeholder-not-a-real-anthropic-key
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE must be set to the image reference to rehearse}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_ENVIRONMENT: ci
+      API_URL: http://api:4000
+      NEXTAUTH_URL: http://localhost:3100
+      NEXTAUTH_SECRET: rehearsal-only-web-nextauth-secret-do-not-use-in-production
+    ports:
+      - '3100:3100'
+    depends_on:
+      - api

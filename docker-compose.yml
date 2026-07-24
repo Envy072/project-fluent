@@ -36,6 +36,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: development
+      DEPLOYMENT_ENVIRONMENT: local
       PORT: 4000
       DATABASE_URL: postgresql://fluent:fluent_dev_password@postgres:5432/project_fluent
       REDIS_URL: redis://redis:6379
@@ -67,6 +68,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      DEPLOYMENT_ENVIRONMENT: local
       # NEXT_PUBLIC_API_URL is NOT set here: it's inlined into the client
       # bundle at build time (see the `args` above and apps/web/Dockerfile),
       # so setting it as a container-runtime env var here would have no

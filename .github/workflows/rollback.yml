@@ -1,0 +1,54 @@
+name: Rollback
+
+# Manually triggered only, per M37's Rollback Principles: rollback is a
+# deliberate, valid outcome of Post-Release Evaluation or an Operational
+# Incident (M36) — never an automatic reaction. Restores a previously
+# built and pushed image tag to the deployment target and re-verifies it.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Previous image tag to roll back to (the git SHA it was built from)'
+        required: true
+
+env:
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+
+jobs:
+  rollback:
+    name: Roll back to previous release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Roll back to the requested image tag
+        env:
+          IMAGE_REGISTRY: ${{ env.IMAGE_REGISTRY }}
+        run: bash scripts/deploy/rollback.sh "${{ inputs.image_tag }}"
+
+      - name: Confirm rollback target reports healthy (M38 Operational Validation)
+        run: |
+          for service in api web; do
+            status="$(docker inspect --format='{{.State.Health.Status}}' "$(docker compose -f docker-compose.deploy-rehearsal.yml ps -q "$service")")"
+            if [ "$status" != "healthy" ]; then
+              echo "Rollback failed operational validation — $service reports '$status'" >&2
+              exit 1
+            fi
+          done
+
+      - name: Tear down the rehearsal target
+        if: always()
+        run: docker compose -f docker-compose.deploy-rehearsal.yml down -v
+
+      - name: Summary
+        run: |
+          echo "### Rollback Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Rolled back to tag: \`${{ inputs.image_tag }}\`" >> "$GITHUB_STEP_SUMMARY"

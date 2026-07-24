@@ -29,11 +29,22 @@ RUN pnpm --filter @project-fluent/web... build
 FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# tini becomes PID 1 so SIGTERM (sent by Docker/ECS during a graceful stop
+# or rolling deploy) is forwarded correctly to the Node process — Node
+# itself does not handle being PID 1 properly, per M38's "Minimal User
+# Disruption" and Recovery Principles.
+RUN apk add --no-cache tini
 WORKDIR /repo/standalone
-COPY --from=build /repo/apps/web/.next/standalone/. ./
-COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
-COPY --from=build /repo/apps/web/public ./apps/web/public
+COPY --from=build --chown=node:node /repo/apps/web/.next/standalone/. ./
+COPY --from=build --chown=node:node /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build --chown=node:node /repo/apps/web/public ./apps/web/public
+USER node
 EXPOSE 3100
 ENV PORT=3100
 ENV HOSTNAME=0.0.0.0
+# Confirms the container itself — not just an external monitor — can
+# report its own health, per M36's Rapid Detection principle.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3100/',(r)=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "apps/web/server.js"]

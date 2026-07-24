@@ -9,6 +9,7 @@ on:
 env:
   TURBO_TELEMETRY_DISABLED: 1
   NEXT_TELEMETRY_DISABLED: 1
+  DEPLOYMENT_ENVIRONMENT: ci
   # CI-only secrets — every real environment must set its own distinct,
   # randomly generated values (see .env.example, ADR-005).
   DATABASE_URL: postgresql://fluent:fluent_ci_password@localhost:5432/project_fluent
